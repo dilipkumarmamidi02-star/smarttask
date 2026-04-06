@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
-import { uploadFile } from "@/lib/storage";
+
 import { SKILL_CATEGORIES, EDUCATION_LEVELS, EXPERIENCE_LEVELS } from "@/lib/skillsData";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -68,8 +68,8 @@ export default function ProfileSetup() {
   async function handlePhotoUpload(e) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const { file_url } = await uploadFile({ file });
-    setForm((prev) => ({ ...prev, profile_photo: file_url }));
+    // photo upload disabled
+    
     toast.success("Photo uploaded");
   }
 
