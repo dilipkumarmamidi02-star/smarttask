@@ -39,7 +39,7 @@ export function AuthProvider({ children }) {
           }
         } catch (err) {
           console.error("Firestore error:", err);
-          const fallbackProfile = {
+          setUserProfile({
             id: firebaseUser.uid,
             uid: firebaseUser.uid,
             email: firebaseUser.email,
@@ -48,8 +48,7 @@ export function AuthProvider({ children }) {
             profile_completed: false,
             created_date: new Date().toISOString(),
             updated_date: new Date().toISOString(),
-          };
-          setUserProfile(fallbackProfile);
+          });
         }
       } else {
         setCurrentUser(null);
@@ -86,16 +85,33 @@ export function AuthProvider({ children }) {
   }
 
   async function me() {
-    if (!currentUs
-cat > firestore.rules << 'EOF'
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /user_profiles/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+    if (!currentUser) return null;
+    try {
+      const ref = doc(db, "user_profiles", currentUser.uid);
+      const snap = await getDoc(ref);
+      if (snap.exists()) {
+        const profile = { id: snap.id, ...snap.data() };
+        setUserProfile(profile);
+        return profile;
+      }
+    } catch (err) {
+      console.error("me() error:", err);
     }
-    match /{document=**} {
-      allow read, write: if request.auth != null;
-    }
+    return userProfile;
   }
+
+  return (
+    <AuthContext.Provider value={{
+      currentUser, userProfile, isLoadingAuth,
+      isLoadingPublicSettings: false, authError: null,
+      signInWithGoogle, logout, updateProfile, me,
+      navigateToLogin: () => {},
+    }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export function useAuth() {
+  return useContext(AuthContext);
 }
