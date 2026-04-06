@@ -1,7 +1,8 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import {
   GoogleAuthProvider,
-  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut,
   onAuthStateChanged,
 } from "firebase/auth";
@@ -16,27 +17,43 @@ export function AuthProvider({ children }) {
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
 
   useEffect(() => {
+    const timeout = setTimeout(() => setIsLoadingAuth(false), 8000);
+
+    getRedirectResult(auth).catch((err) => {
+      console.warn("Redirect result error:", err.message);
+    });
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      clearTimeout(timeout);
       if (firebaseUser) {
         setCurrentUser(firebaseUser);
-        // Load Firestore profile
-        const profileRef = doc(db, "user_profiles", firebaseUser.uid);
-        const snap = await getDoc(profileRef);
-        if (snap.exists()) {
-          setUserProfile({ id: snap.id, ...snap.data() });
-        } else {
-          // Create base profile on first login
-          const baseProfile = {
+        try {
+          const profileRef = doc(db, "user_profiles", firebaseUser.uid);
+          const snap = await getDoc(profileRef);
+          if (snap.exists()) {
+            setUserProfile({ id: snap.id, ...snap.data() });
+          } else {
+            const baseProfile = {
+              uid: firebaseUser.uid,
+              email: firebaseUser.email,
+              full_name: firebaseUser.displayName || "",
+              profile_photo: firebaseUser.photoURL || "",
+              profile_completed: false,
+              created_date: new Date().toISOString(),
+              updated_date: new Date().toISOString(),
+            };
+            await setDoc(profileRef, baseProfile);
+            setUserProfile({ id: firebaseUser.uid, ...baseProfile });
+          }
+        } catch (err) {
+          console.warn("Firestore error:", err.message);
+          setUserProfile({
             uid: firebaseUser.uid,
             email: firebaseUser.email,
             full_name: firebaseUser.displayName || "",
             profile_photo: firebaseUser.photoURL || "",
             profile_completed: false,
-            created_date: new Date().toISOString(),
-            updated_date: new Date().toISOString(),
-          };
-          await setDoc(profileRef, baseProfile);
-          setUserProfile({ id: firebaseUser.uid, ...baseProfile });
+          });
         }
       } else {
         setCurrentUser(null);
@@ -45,17 +62,15 @@ export function AuthProvider({ children }) {
       setIsLoadingAuth(false);
     });
 
-    return unsubscribe;
+    return () => { clearTimeout(timeout); unsubscribe(); };
   }, []);
 
   async function signInWithGoogle() {
     const provider = new GoogleAuthProvider();
-    await signInWithPopup(auth, provider);
+    await signInWithRedirect(auth, provider);
   }
 
-  async function logout() {
-    await signOut(auth);
-  }
+  async function logout() { await signOut(auth); }
 
   async function updateProfile(data) {
     if (!currentUser) return;
@@ -66,7 +81,6 @@ export function AuthProvider({ children }) {
     return payload;
   }
 
-  // Mirror the base44 auth.me() API
   async function me() {
     if (!currentUser) return null;
     const ref = doc(db, "user_profiles", currentUser.uid);
@@ -79,22 +93,11 @@ export function AuthProvider({ children }) {
     return userProfile;
   }
 
-  const value = {
-    currentUser,
-    userProfile,
-    isLoadingAuth,
-    isLoadingPublicSettings: false,
-    authError: null,
-    signInWithGoogle,
-    logout,
-    updateProfile,
-    me,
-    navigateToLogin: () => {},
-  };
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={{ currentUser, userProfile, isLoadingAuth, isLoadingPublicSettings: false, authError: null, signInWithGoogle, logout, updateProfile, me, navigateToLogin: () => {} }}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
-export function useAuth() {
-  return useContext(AuthContext);
-}
+export function useAuth() { return useContext(AuthContext); }
