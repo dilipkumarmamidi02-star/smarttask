@@ -1,8 +1,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import {
   GoogleAuthProvider,
-  signInWithRedirect,
-  getRedirectResult,
+  signInWithPopup,
   signOut,
   onAuthStateChanged,
 } from "firebase/auth";
@@ -17,10 +16,6 @@ export function AuthProvider({ children }) {
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
 
   useEffect(() => {
-    getRedirectResult(auth).catch((err) => {
-      console.error("Redirect error:", err.code, err.message);
-    });
-
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         setCurrentUser(firebaseUser);
@@ -53,7 +48,9 @@ export function AuthProvider({ children }) {
 
   async function signInWithGoogle() {
     const provider = new GoogleAuthProvider();
-    await signInWithRedirect(auth, provider);
+    provider.addScope("email");
+    provider.addScope("profile");
+    await signInWithPopup(auth, provider);
   }
 
   async function logout() {
