@@ -32,7 +32,7 @@ export default function ProfileSetup() {
 
   useEffect(() => {
     if (isLoadingAuth) return;
-    if (!userProfile) return;
+    if (!userProfile) { setLoading(false); return; }
     if (userProfile.profile_completed) {
       if (userProfile.user_role === "client") navigate("/client");
       else navigate("/student");

@@ -51,7 +51,7 @@ function AppRoutes() {
     <Routes>
       {/* Public routes */}
       <Route path="/" element={<Landing />} />
-      <Route path="/login" element={currentUser ? <Navigate to="/profile-setup" replace /> : <Login />} />
+      <Route path="/login" element={currentUser ? (userProfile?.profile_completed ? (userProfile.user_role === "client" ? <Navigate to="/client" replace /> : <Navigate to="/student" replace />) : <Navigate to="/profile-setup" replace />) : <Login />} />
       <Route path="/companies" element={<CompanyCredentials />} />
       <Route path="/marketplace" element={<Marketplace />} />
       <Route path="/task/:id" element={<TaskDetail />} />
