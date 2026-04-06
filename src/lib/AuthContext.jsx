@@ -17,9 +17,8 @@ export function AuthProvider({ children }) {
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
 
   useEffect(() => {
-    // Handle redirect result first
     getRedirectResult(auth).catch((err) => {
-      console.error("Redirect result error:", err);
+      console.error("Redirect error:", err.code, err.message);
     });
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
