@@ -19,12 +19,28 @@ export function AuthProvider({ children }) {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         setCurrentUser(firebaseUser);
-        const profileRef = doc(db, "user_profiles", firebaseUser.uid);
-        const snap = await getDoc(profileRef);
-        if (snap.exists()) {
-          setUserProfile({ id: snap.id, ...snap.data() });
-        } else {
-          const baseProfile = {
+        try {
+          const profileRef = doc(db, "user_profiles", firebaseUser.uid);
+          const snap = await getDoc(profileRef);
+          if (snap.exists()) {
+            setUserProfile({ id: snap.id, ...snap.data() });
+          } else {
+            const baseProfile = {
+              uid: firebaseUser.uid,
+              email: firebaseUser.email,
+              full_name: firebaseUser.displayName || "",
+              profile_photo: firebaseUser.photoURL || "",
+              profile_completed: false,
+              created_date: new Date().toISOString(),
+              updated_date: new Date().toISOString(),
+            };
+            await setDoc(profileRef, baseProfile);
+            setUserProfile({ id: firebaseUser.uid, ...baseProfile });
+          }
+        } catch (err) {
+          console.error("Firestore error:", err);
+          const fallbackProfile = {
+            id: firebaseUser.uid,
             uid: firebaseUser.uid,
             email: firebaseUser.email,
             full_name: firebaseUser.displayName || "",
@@ -33,8 +49,7 @@ export function AuthProvider({ children }) {
             created_date: new Date().toISOString(),
             updated_date: new Date().toISOString(),
           };
-          await setDoc(profileRef, baseProfile);
-          setUserProfile({ id: firebaseUser.uid, ...baseProfile });
+          setUserProfile(fallbackProfile);
         }
       } else {
         setCurrentUser(null);
@@ -61,35 +76,26 @@ export function AuthProvider({ children }) {
     if (!currentUser) return;
     const ref = doc(db, "user_profiles", currentUser.uid);
     const payload = { ...data, updated_date: new Date().toISOString() };
-    await updateDoc(ref, payload);
+    try {
+      await updateDoc(ref, payload);
+    } catch (err) {
+      console.error("updateProfile error:", err);
+    }
     setUserProfile((prev) => ({ ...prev, ...payload }));
     return payload;
   }
 
   async function me() {
-    if (!currentUser) return null;
-    const ref = doc(db, "user_profiles", currentUser.uid);
-    const snap = await getDoc(ref);
-    if (snap.exists()) {
-      const profile = { id: snap.id, ...snap.data() };
-      setUserProfile(profile);
-      return profile;
+    if (!currentUs
+cat > firestore.rules << 'EOF'
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /user_profiles/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
     }
-    return userProfile;
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
   }
-
-  return (
-    <AuthContext.Provider value={{
-      currentUser, userProfile, isLoadingAuth,
-      isLoadingPublicSettings: false, authError: null,
-      signInWithGoogle, logout, updateProfile, me,
-      navigateToLogin: () => {},
-    }}>
-      {children}
-    </AuthContext.Provider>
-  );
-}
-
-export function useAuth() {
-  return useContext(AuthContext);
 }
