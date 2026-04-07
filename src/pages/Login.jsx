@@ -12,7 +12,7 @@ export default function Login() {
     setLoading(true);
     try {
       await signInWithGoogle();
-      // No navigate() here — signInWithRedirect leaves the page automatically
+      
     } catch (err) {
       console.error(err);
       toast.error("Login failed: " + err.message);

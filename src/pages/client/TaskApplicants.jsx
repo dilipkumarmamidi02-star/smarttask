@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
 import { entities } from "@/lib/firestore";
+import { getDownloadUrl } from "@/lib/storage";
 import { sendEmail } from "@/lib/email";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -186,7 +187,7 @@ export default function TaskApplicants() {
                   {d.description && <p className="text-xs text-muted-foreground">{d.description}</p>}
                   <p className="text-xs text-muted-foreground">By: {d.uploaded_by}</p>
                 </div>
-                <a href={d.file_url} target="_blank" rel="noopener noreferrer">
+                <a href={getDownloadUrl(d.file_url, d.file_name)} target="_blank" rel="noopener noreferrer" download={d.file_name}>
                   <Button size="sm" variant="outline">Download</Button>
                 </a>
               </div>

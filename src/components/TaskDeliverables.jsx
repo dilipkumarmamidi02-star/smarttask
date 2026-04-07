@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { entities } from "@/lib/firestore";
-import { uploadFile } from "@/lib/storage";
+import { uploadFile, getDownloadUrl } from "@/lib/storage";
 import { sendEmail } from "@/lib/email";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -123,7 +123,7 @@ export default function TaskDeliverables({ taskId, task, currentUser }) {
                 <p className="text-sm font-medium text-foreground truncate">{d.file_name}</p>
                 {d.description && <p className="text-xs text-muted-foreground">{d.description}</p>}
               </div>
-              <a href={d.file_url} target="_blank" rel="noopener noreferrer">
+              <a href={getDownloadUrl(d.file_url, d.file_name)} target="_blank" rel="noopener noreferrer" download={d.file_name}>
                 <Button size="sm" variant="outline">Download</Button>
               </a>
             </div>

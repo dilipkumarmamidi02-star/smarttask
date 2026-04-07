@@ -24,3 +24,8 @@ export async function uploadFile({ file }) {
     file_type: file.type,
   };
 }
+
+export function getDownloadUrl(url, fileName) {
+  if (!url) return url;
+  return url.replace("/upload/", `/upload/fl_attachment:${fileName?.replace(/[^a-zA-Z0-9._-]/g, "_") || "file"}/`);
+}
