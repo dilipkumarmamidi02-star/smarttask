@@ -1,8 +1,8 @@
+cat > ~/Downloads/smarttask/src/pages/client/TaskApplicants.jsx << 'ENDOFFILE'
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
 import { entities } from "@/lib/firestore";
-import { sendEmail } from "@/lib/email";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -23,6 +23,7 @@ export default function TaskApplicants() {
   const [deliverables, setDeliverables] = useState([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(null);
+  const [downloading, setDownloading] = useState(null);
   const [reviewForm, setReviewForm] = useState({ rating: 0, comment: "" });
   const [showReview, setShowReview] = useState(false);
 
@@ -50,36 +51,24 @@ export default function TaskApplicants() {
   async function handleAccept(app) {
     setProcessing(app.id);
     await entities.Application.update(app.id, { status: "accepted" });
-    await entities.Task.update(id, { status: "assigned", assigned_to: app.user_email });
+    await entities.Task.update(id, { status: "assigned" });
     const existing = await entities.Escrow.filter({ task_id: id, student_email: app.user_email });
     if (existing.length === 0) {
       await entities.Escrow.create({
-        task_id: id,
-        task_title: task.title,
-        client_email: task.posted_by,
-        student_email: app.user_email,
-        amount: task.budget || 0,
-        status: "held",
+        task_id: id, task_title: task.title,
+        client_email: task.posted_by, student_email: app.user_email,
+        amount: task.budget || 0, status: "held",
       });
     }
     await entities.Notification.create({
       user_email: app.user_email,
       title: "You've been selected!",
       message: `You were selected for "${task.title}". Payment of ₹${task.budget} is held in escrow.`,
-      type: "task",
-      link: `/task/${id}`,
-      is_read: false,
+      type: "task", link: `/task/${id}`, is_read: false,
     });
-    await sendEmail("application_approved", {
-      to_email: app.user_email,
-      to_name: app.user_name,
-      task_title: task.title,
-      budget: task.budget,
-      client_name: userProfile.full_name,
-    });
-    toast.success(`${app.user_name} has been selected! Email sent.`);
+    toast.success(`${app.user_name} accepted!`);
     setApplicants((prev) => prev.map((a) => a.id === app.id ? { ...a, status: "accepted" } : a));
-    setTask((prev) => ({ ...prev, status: "assigned", assigned_to: app.user_email }));
+    setTask((prev) => ({ ...prev, status: "assigned" }));
     setProcessing(null);
   }
 
@@ -91,7 +80,22 @@ export default function TaskApplicants() {
     setProcessing(null);
   }
 
+  async function handleDownload(d) {
+    setDownloading(d.id);
+    try {
+      const res = await fetch(d.file_url);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = d.file_name || "download";
+      document.body.appendChild(a); a.click();
+      document.body.removeChild(a); URL.revokeObjectURL(url);
+    } catch { window.open(d.file_url, "_blank"); }
+    setDownloading(null);
+  }
+
   async function handleMarkComplete() {
+    if (deliverables.length === 0) { toast.error("No deliverables submitted yet. Wait for student to submit work."); return; }
     await entities.Task.update(id, { status: "completed" });
     const escrows = await entities.Escrow.filter({ task_id: id, status: "held" });
     for (const e of escrows) {
@@ -100,46 +104,27 @@ export default function TaskApplicants() {
         user_email: e.student_email,
         title: "Payment Released!",
         message: `Your payment of ₹${e.amount} for "${task.title}" has been released.`,
-        type: "task",
-        link: `/task/${id}`,
-        is_read: false,
-      });
-      await sendEmail("payment_released", {
-        to_email: e.student_email,
-        to_name: applicants.find((a) => a.user_email === e.student_email)?.user_name || "Student",
-        task_title: task.title,
-        budget: e.amount,
-        client_name: userProfile.full_name,
+        type: "task", link: `/task/${id}`, is_read: false,
       });
     }
-    await sendEmail("work_completed", {
-      to_email: userProfile.email,
-      to_name: userProfile.full_name,
-      task_title: task.title,
-      deliverables_count: deliverables.length,
-    });
     setTask((prev) => ({ ...prev, status: "completed" }));
     setShowReview(true);
-    toast.success("Task completed! Payment released. Emails sent.");
+    toast.success("Task completed! Payment released to all accepted students.");
   }
 
-  async function handleSubmitReview() {
+  async function handleSubmitReview(studentEmail, studentName) {
     if (!reviewForm.rating) { toast.error("Please select a rating"); return; }
     await entities.Review.create({
-      student_email: task.assigned_to,
-      client_email: userProfile.email,
-      task_id: id,
-      task_title: task.title,
-      rating: reviewForm.rating,
-      comment: reviewForm.comment,
+      student_email: studentEmail, client_email: userProfile.email,
+      task_id: id, task_title: task.title,
+      rating: reviewForm.rating, comment: reviewForm.comment,
     });
-    setApplicantReviews((prev) => ({ ...prev, [task.assigned_to]: { rating: reviewForm.rating } }));
+    setApplicantReviews((prev) => ({ ...prev, [studentEmail]: { rating: reviewForm.rating } }));
     setShowReview(false);
-    toast.success("Review submitted!");
+    toast.success(`Review submitted for ${studentName}!`);
   }
 
   if (loading) return <div className="flex justify-center py-10"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
-
   const acceptedApplicants = applicants.filter((a) => a.status === "accepted");
 
   return (
@@ -147,29 +132,33 @@ export default function TaskApplicants() {
       <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
         <ArrowLeft size={16} /> Back
       </button>
-
       <div className="bg-card border border-border rounded-2xl p-6">
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="font-heading text-xl font-bold text-foreground">{task.title}</h2>
             <p className="text-sm text-muted-foreground mt-1">₹{task.budget} · {task.category} · <span className="capitalize">{task.status}</span></p>
+            {acceptedApplicants.length > 0 && <p className="text-xs text-primary mt-1">{acceptedApplicants.length} student(s) working on this</p>}
           </div>
           <div className="flex gap-2 flex-wrap">
-            {(task.status === "assigned" || task.status === "open") && acceptedApplicants.length > 0 && !showReview && (
-              <Button onClick={handleMarkComplete} variant="outline" size="sm" className="font-heading">Mark Completed</Button>
+            {task.status === "assigned" && (
+              <Button onClick={handleMarkComplete} size="sm" className="font-heading">
+                ✓ Verify & Release Payment
+              </Button>
             )}
             {task.status === "completed" && (
-              <InvoiceGenerator task={task} client={{ email: task.posted_by }} student={{ email: task.assigned_to, full_name: acceptedApplicants[0]?.user_name }} />
+              <InvoiceGenerator task={task} client={{ email: task.posted_by }}
+                student={{ email: acceptedApplicants[0]?.user_email, full_name: acceptedApplicants[0]?.user_name }} />
             )}
           </div>
         </div>
       </div>
 
-      {deliverables.length > 0 && (
+      {deliverables.length > 0 ? (
         <div className="bg-card border border-border rounded-2xl p-6 space-y-3">
           <h3 className="font-heading font-semibold text-foreground flex items-center gap-2">
             <Paperclip size={16} /> Submitted Deliverables ({deliverables.length})
           </h3>
+          <p className="text-xs text-muted-foreground">Download and verify all files before releasing payment.</p>
           <div className="space-y-2">
             {deliverables.map((d) => (
               <div key={d.id} className="flex items-center gap-3 bg-muted rounded-lg p-3">
@@ -179,35 +168,29 @@ export default function TaskApplicants() {
                   {d.description && <p className="text-xs text-muted-foreground">{d.description}</p>}
                   <p className="text-xs text-muted-foreground">By: {d.uploaded_by}</p>
                 </div>
-                <a href={d.file_url} target="_blank" rel="noopener noreferrer">
-                  <Button size="sm" variant="outline" onClick={async () => {
-                    const res = await fetch(d.file_url);
-                    const blob = await res.blob();
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.href = url;
-                    a.download = d.file_name;
-                    a.click();
-                    URL.revokeObjectURL(url);
-                  }}>Download</Button>
-                </a>
+                <Button size="sm" variant="outline" disabled={downloading === d.id} onClick={() => handleDownload(d)}>
+                  {downloading === d.id ? <Loader2 size={12} className="animate-spin" /> : "Download"}
+                </Button>
               </div>
             ))}
           </div>
         </div>
+      ) : (
+        task.status === "assigned" && (
+          <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 text-sm text-yellow-600">
+            ⏳ Waiting for student(s) to submit deliverables. Payment button will activate after they submit.
+          </div>
+        )
       )}
 
-      {showReview && task.assigned_to && (
-        <div className="bg-card border border-primary/30 rounded-2xl p-6 space-y-4">
-          <h3 className="font-heading font-semibold text-foreground">Rate the Student</h3>
-          <StarRating rating={reviewForm.rating} onRate={(r) => setReviewForm({ ...reviewForm, rating: r })} size={28} interactive />
-          <div>
-            <Label>Comment (optional)</Label>
-            <Textarea value={reviewForm.comment} onChange={(e) => setReviewForm({ ...reviewForm, comment: e.target.value })} rows={2} />
-          </div>
-          <Button onClick={handleSubmitReview} className="font-heading">Submit Review</Button>
+      {showReview && acceptedApplicants.map((app) => !applicantReviews[app.user_email] && (
+        <div key={app.id} className="bg-card border border-primary/30 rounded-2xl p-6 space-y-3">
+          <h3 className="font-heading font-semibold text-foreground">Rate {app.user_name}</h3>
+          <StarRating rating={reviewForm.rating} onRate={(r) => setReviewForm({ ...reviewForm, rating: r })} size={24} interactive />
+          <Textarea value={reviewForm.comment} onChange={(e) => setReviewForm({ ...reviewForm, comment: e.target.value })} placeholder="Comment (optional)" rows={2} />
+          <Button onClick={() => handleSubmitReview(app.user_email, app.user_name)} className="font-heading" size="sm">Submit Review</Button>
         </div>
-      )}
+      ))}
 
       <h3 className="font-heading text-lg font-semibold text-foreground">Applicants ({applicants.length})</h3>
       {applicants.length === 0 ? (
@@ -239,7 +222,7 @@ export default function TaskApplicants() {
                     {app.message && <p className="text-sm text-muted-foreground mt-2 italic">"{app.message}"</p>}
                   </div>
                   <div className="shrink-0">
-                    {app.status === "pending" && (
+                    {app.status === "pending" && task.status !== "completed" && (
                       <div className="flex gap-2">
                         <Button size="sm" onClick={() => handleAccept(app)} disabled={processing === app.id} className="font-heading">
                           {processing === app.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <><CheckCircle size={14} className="mr-1" /> Accept</>}

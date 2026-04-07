@@ -135,7 +135,7 @@ export default function TaskDetail() {
           </div>
         </div>
 
-        {userProfile?.user_role === "student" && task.status === "open" && (
+        {userProfile?.user_role === "student" && task.status !== "completed" && (
           <div className="border-t border-border pt-6">
             {applied ? (
               <div className="bg-primary/10 text-primary rounded-xl p-4 text-center font-medium">
