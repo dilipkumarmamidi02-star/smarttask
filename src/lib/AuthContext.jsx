@@ -1,7 +1,8 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import {
   GoogleAuthProvider,
-  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut,
   onAuthStateChanged,
 } from "firebase/auth";
@@ -15,41 +16,59 @@ export function AuthProvider({ children }) {
   const [userProfile, setUserProfile] = useState(null);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
 
+  async function fetchOrCreateProfile(firebaseUser) {
+    try {
+      const profileRef = doc(db, "user_profiles", firebaseUser.uid);
+      const snap = await getDoc(profileRef);
+      if (snap.exists()) {
+        setUserProfile({ id: snap.id, ...snap.data() });
+      } else {
+        const baseProfile = {
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          full_name: firebaseUser.displayName || "",
+          profile_photo: firebaseUser.photoURL || "",
+          profile_completed: false,
+          created_date: new Date().toISOString(),
+          updated_date: new Date().toISOString(),
+        };
+        await setDoc(profileRef, baseProfile);
+        setUserProfile({ id: firebaseUser.uid, ...baseProfile });
+      }
+    } catch (err) {
+      console.error("Firestore error:", err);
+      setUserProfile({
+        id: firebaseUser.uid,
+        uid: firebaseUser.uid,
+        email: firebaseUser.email,
+        full_name: firebaseUser.displayName || "",
+        profile_photo: firebaseUser.photoURL || "",
+        profile_completed: false,
+        created_date: new Date().toISOString(),
+        updated_date: new Date().toISOString(),
+      });
+    }
+  }
+
   useEffect(() => {
+    async function handleRedirectResult() {
+      try {
+        const result = await getRedirectResult(auth);
+        if (result?.user) {
+          setCurrentUser(result.user);
+          await fetchOrCreateProfile(result.user);
+        }
+      } catch (err) {
+        console.error("Redirect result error:", err);
+      }
+    }
+
+    handleRedirectResult();
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         setCurrentUser(firebaseUser);
-        try {
-          const profileRef = doc(db, "user_profiles", firebaseUser.uid);
-          const snap = await getDoc(profileRef);
-          if (snap.exists()) {
-            setUserProfile({ id: snap.id, ...snap.data() });
-          } else {
-            const baseProfile = {
-              uid: firebaseUser.uid,
-              email: firebaseUser.email,
-              full_name: firebaseUser.displayName || "",
-              profile_photo: firebaseUser.photoURL || "",
-              profile_completed: false,
-              created_date: new Date().toISOString(),
-              updated_date: new Date().toISOString(),
-            };
-            await setDoc(profileRef, baseProfile);
-            setUserProfile({ id: firebaseUser.uid, ...baseProfile });
-          }
-        } catch (err) {
-          console.error("Firestore error:", err);
-          setUserProfile({
-            id: firebaseUser.uid,
-            uid: firebaseUser.uid,
-            email: firebaseUser.email,
-            full_name: firebaseUser.displayName || "",
-            profile_photo: firebaseUser.photoURL || "",
-            profile_completed: false,
-            created_date: new Date().toISOString(),
-            updated_date: new Date().toISOString(),
-          });
-        }
+        await fetchOrCreateProfile(firebaseUser);
       } else {
         setCurrentUser(null);
         setUserProfile(null);
@@ -64,7 +83,7 @@ export function AuthProvider({ children }) {
     const provider = new GoogleAuthProvider();
     provider.addScope("email");
     provider.addScope("profile");
-    await signInWithPopup(auth, provider);
+    await signInWithRedirect(auth, provider);
   }
 
   async function logout() {
