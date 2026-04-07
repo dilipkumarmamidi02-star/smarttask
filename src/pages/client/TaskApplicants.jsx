@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
 import { entities } from "@/lib/firestore";
-import { getDownloadUrl } from "@/lib/storage";
 import { sendEmail } from "@/lib/email";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -52,18 +51,17 @@ export default function TaskApplicants() {
     setProcessing(app.id);
     await entities.Application.update(app.id, { status: "accepted" });
     await entities.Task.update(id, { status: "assigned", assigned_to: app.user_email });
-    const others = applicants.filter((a) => a.id !== app.id && a.status === "pending");
-    for (const other of others) {
-      await entities.Application.update(other.id, { status: "rejected" });
+    const existing = await entities.Escrow.filter({ task_id: id, student_email: app.user_email });
+    if (existing.length === 0) {
+      await entities.Escrow.create({
+        task_id: id,
+        task_title: task.title,
+        client_email: task.posted_by,
+        student_email: app.user_email,
+        amount: task.budget || 0,
+        status: "held",
+      });
     }
-    await entities.Escrow.create({
-      task_id: id,
-      task_title: task.title,
-      client_email: task.posted_by,
-      student_email: app.user_email,
-      amount: task.budget || 0,
-      status: "held",
-    });
     await entities.Notification.create({
       user_email: app.user_email,
       title: "You've been selected!",
@@ -80,12 +78,7 @@ export default function TaskApplicants() {
       client_name: userProfile.full_name,
     });
     toast.success(`${app.user_name} has been selected! Email sent.`);
-    setApplicants((prev) =>
-      prev.map((a) =>
-        a.id === app.id ? { ...a, status: "accepted" }
-        : a.status === "pending" ? { ...a, status: "rejected" } : a
-      )
-    );
+    setApplicants((prev) => prev.map((a) => a.id === app.id ? { ...a, status: "accepted" } : a));
     setTask((prev) => ({ ...prev, status: "assigned", assigned_to: app.user_email }));
     setProcessing(null);
   }
@@ -103,31 +96,28 @@ export default function TaskApplicants() {
     const escrows = await entities.Escrow.filter({ task_id: id, status: "held" });
     for (const e of escrows) {
       await entities.Escrow.update(e.id, { status: "released" });
-    }
-    if (task.assigned_to) {
       await entities.Notification.create({
-        user_email: task.assigned_to,
+        user_email: e.student_email,
         title: "Payment Released!",
-        message: `Your payment of ₹${task.budget} for "${task.title}" has been released.`,
+        message: `Your payment of ₹${e.amount} for "${task.title}" has been released.`,
         type: "task",
         link: `/task/${id}`,
         is_read: false,
       });
       await sendEmail("payment_released", {
-        to_email: task.assigned_to,
-        to_name: applicants.find((a) => a.user_email === task.assigned_to)?.user_name || "Student",
+        to_email: e.student_email,
+        to_name: applicants.find((a) => a.user_email === e.student_email)?.user_name || "Student",
         task_title: task.title,
-        budget: task.budget,
+        budget: e.amount,
         client_name: userProfile.full_name,
       });
-      await sendEmail("work_completed", {
-        to_email: userProfile.email,
-        to_name: userProfile.full_name,
-        task_title: task.title,
-        student_name: applicants.find((a) => a.user_email === task.assigned_to)?.user_name || "Student",
-        deliverables_count: deliverables.length,
-      });
     }
+    await sendEmail("work_completed", {
+      to_email: userProfile.email,
+      to_name: userProfile.full_name,
+      task_title: task.title,
+      deliverables_count: deliverables.length,
+    });
     setTask((prev) => ({ ...prev, status: "completed" }));
     setShowReview(true);
     toast.success("Task completed! Payment released. Emails sent.");
@@ -150,6 +140,8 @@ export default function TaskApplicants() {
 
   if (loading) return <div className="flex justify-center py-10"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
 
+  const acceptedApplicants = applicants.filter((a) => a.status === "accepted");
+
   return (
     <div className="max-w-3xl space-y-6">
       <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
@@ -163,11 +155,11 @@ export default function TaskApplicants() {
             <p className="text-sm text-muted-foreground mt-1">₹{task.budget} · {task.category} · <span className="capitalize">{task.status}</span></p>
           </div>
           <div className="flex gap-2 flex-wrap">
-            {task.status === "assigned" && !showReview && (
+            {(task.status === "assigned" || task.status === "open") && acceptedApplicants.length > 0 && !showReview && (
               <Button onClick={handleMarkComplete} variant="outline" size="sm" className="font-heading">Mark Completed</Button>
             )}
-            {task.status === "completed" && task.assigned_to && (
-              <InvoiceGenerator task={task} client={{ email: task.posted_by }} student={{ email: task.assigned_to, full_name: applicants.find((a) => a.user_email === task.assigned_to)?.user_name }} />
+            {task.status === "completed" && (
+              <InvoiceGenerator task={task} client={{ email: task.posted_by }} student={{ email: task.assigned_to, full_name: acceptedApplicants[0]?.user_name }} />
             )}
           </div>
         </div>
@@ -187,8 +179,17 @@ export default function TaskApplicants() {
                   {d.description && <p className="text-xs text-muted-foreground">{d.description}</p>}
                   <p className="text-xs text-muted-foreground">By: {d.uploaded_by}</p>
                 </div>
-                <a href={getDownloadUrl(d.file_url, d.file_name)} target="_blank" rel="noopener noreferrer" download={d.file_name}>
-                  <Button size="sm" variant="outline">Download</Button>
+                <a href={d.file_url} target="_blank" rel="noopener noreferrer">
+                  <Button size="sm" variant="outline" onClick={async () => {
+                    const res = await fetch(d.file_url);
+                    const blob = await res.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = d.file_name;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}>Download</Button>
                 </a>
               </div>
             ))}
@@ -238,7 +239,7 @@ export default function TaskApplicants() {
                     {app.message && <p className="text-sm text-muted-foreground mt-2 italic">"{app.message}"</p>}
                   </div>
                   <div className="shrink-0">
-                    {app.status === "pending" && task.status === "open" && (
+                    {app.status === "pending" && (
                       <div className="flex gap-2">
                         <Button size="sm" onClick={() => handleAccept(app)} disabled={processing === app.id} className="font-heading">
                           {processing === app.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <><CheckCircle size={14} className="mr-1" /> Accept</>}

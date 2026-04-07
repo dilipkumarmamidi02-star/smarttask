@@ -20,7 +20,11 @@ export default function Marketplace() {
 
   useEffect(() => {
     async function load() {
-      const allTasks = await entities.Task.filter({ status: "open" }, "-created_date");
+      const [openTasks, assignedTasks] = await Promise.all([
+        entities.Task.filter({ status: "open" }, "-created_date"),
+        entities.Task.filter({ status: "assigned" }, "-created_date"),
+      ]);
+      const allTasks = [...openTasks, ...assignedTasks];
       setUserSkills(userProfile?.skills || []);
       setTasks(allTasks);
       setLoading(false);
@@ -29,10 +33,6 @@ export default function Marketplace() {
   }, [userProfile]);
 
   const filtered = tasks.filter((task) => {
-    if (userSkills.length > 0) {
-      const match = calculateSkillMatch(userSkills, task.required_skills);
-      if (match === 0) return false;
-    }
     if (category !== "all" && task.category !== category) return false;
     if (search) {
       const q = search.toLowerCase();
@@ -61,9 +61,7 @@ export default function Marketplace() {
       <div>
         <h2 className="font-heading text-2xl font-bold text-foreground">Task Marketplace</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          {userSkills.length > 0
-            ? `Showing ${filtered.length} tasks matching your skills`
-            : "Browse all available tasks"}
+          Showing {filtered.length} available tasks
         </p>
       </div>
 
@@ -111,9 +109,7 @@ export default function Marketplace() {
               key={p}
               onClick={() => setPage(p)}
               className={`h-9 w-9 rounded-lg text-sm font-medium transition-colors ${
-                p === page
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground hover:bg-muted/80"
+                p === page ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80"
               }`}
             >
               {p}
