@@ -1,4 +1,3 @@
-cat > ~/Downloads/smarttask/src/pages/client/TaskApplicants.jsx << 'ENDOFFILE'
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
