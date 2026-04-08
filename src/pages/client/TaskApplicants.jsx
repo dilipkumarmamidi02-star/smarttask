@@ -1,11 +1,9 @@
-import { emailApplicationAccepted, emailApplicationRejected, emailWorkSubmitted } from "@/lib/emailService";
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
 import { entities } from "@/lib/firestore";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Loader2, ArrowLeft, CheckCircle, XCircle, User, FileDown, Paperclip } from "lucide-react";
 import SkillBadge from "@/components/SkillBadge";
@@ -60,8 +58,6 @@ export default function TaskApplicants() {
         amount: task.budget || 0, status: "held",
       });
     }
-    emailApplicationAccepted({ studentEmail: app.user_email, studentName: app.user_name, taskTitle: task.title });
-    emailApplicationAccepted({ studentEmail: app.user_email, studentName: app.user_name, taskTitle: task.title });
     await entities.Notification.create({
       user_email: app.user_email,
       title: "You've been selected!",
@@ -97,14 +93,15 @@ export default function TaskApplicants() {
   }
 
   async function handleMarkComplete() {
-    if (deliverables.length === 0) { toast.error("No deliverables submitted yet. Wait for student to submit work."); return; }
+    if (deliverables.length === 0) {
+      toast.error("No deliverables submitted yet. Wait for student to upload work first.");
+      return;
+    }
     await entities.Task.update(id, { status: "completed" });
     const escrows = await entities.Escrow.filter({ task_id: id, status: "held" });
     for (const e of escrows) {
       await entities.Escrow.update(e.id, { status: "released" });
-      emailApplicationAccepted({ studentEmail: app.user_email, studentName: app.user_name, taskTitle: task.title });
-    emailApplicationAccepted({ studentEmail: app.user_email, studentName: app.user_name, taskTitle: task.title });
-    await entities.Notification.create({
+      await entities.Notification.create({
         user_email: e.student_email,
         title: "Payment Released!",
         message: `Your payment of ₹${e.amount} for "${task.title}" has been released.`,
@@ -136,6 +133,7 @@ export default function TaskApplicants() {
       <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
         <ArrowLeft size={16} /> Back
       </button>
+
       <div className="bg-card border border-border rounded-2xl p-6">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -182,7 +180,7 @@ export default function TaskApplicants() {
       ) : (
         task.status === "assigned" && (
           <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 text-sm text-yellow-600">
-            ⏳ Waiting for student(s) to submit deliverables. Payment button will activate after they submit.
+            ⏳ Waiting for student(s) to submit work. Payment button activates after they upload deliverables.
           </div>
         )
       )}
