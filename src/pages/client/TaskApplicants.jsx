@@ -1,3 +1,4 @@
+import { emailApplicationAccepted, emailApplicationRejected, emailWorkSubmitted } from "@/lib/emailService";
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
@@ -59,6 +60,8 @@ export default function TaskApplicants() {
         amount: task.budget || 0, status: "held",
       });
     }
+    emailApplicationAccepted({ studentEmail: app.user_email, studentName: app.user_name, taskTitle: task.title });
+    emailApplicationAccepted({ studentEmail: app.user_email, studentName: app.user_name, taskTitle: task.title });
     await entities.Notification.create({
       user_email: app.user_email,
       title: "You've been selected!",
@@ -99,7 +102,9 @@ export default function TaskApplicants() {
     const escrows = await entities.Escrow.filter({ task_id: id, status: "held" });
     for (const e of escrows) {
       await entities.Escrow.update(e.id, { status: "released" });
-      await entities.Notification.create({
+      emailApplicationAccepted({ studentEmail: app.user_email, studentName: app.user_name, taskTitle: task.title });
+    emailApplicationAccepted({ studentEmail: app.user_email, studentName: app.user_name, taskTitle: task.title });
+    await entities.Notification.create({
         user_email: e.student_email,
         title: "Payment Released!",
         message: `Your payment of ₹${e.amount} for "${task.title}" has been released.`,
