@@ -1,3 +1,4 @@
+import { emailApplicationReceived } from "@/lib/emailService";
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
@@ -50,6 +51,7 @@ export default function TaskDetail() {
       message,
       status: "pending",
     });
+    emailApplicationReceived({ clientEmail: task.client_email, clientName: task.client_name, studentName: userProfile.full_name, taskTitle: task.title });
     toast.success("Application submitted!");
     setApplied(true);
     setApplying(false);
