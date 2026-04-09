@@ -1,3 +1,4 @@
+import { emailWorkSubmitted } from "@/lib/emailService";
 import { useState, useEffect } from "react";
 import { entities } from "@/lib/firestore";
 import { uploadFile, getDownloadUrl } from "@/lib/storage";
