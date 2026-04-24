@@ -1,0 +1,16 @@
+{
+  "name": "SmartTask",
+  "short_name": "SmartTask",
+  "description": "Earn While You Learn - Skill-based micro task marketplace",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#7C3AED",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
