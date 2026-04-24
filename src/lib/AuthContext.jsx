@@ -50,10 +50,15 @@ export function AuthProvider({ children }) {
 
   async function signInWithGoogle() {
     const provider = new GoogleAuthProvider();
+    // Always show the Google account picker - never silently reuse a session
+    provider.setCustomParameters({ prompt: "select_account" });
     await signInWithPopup(auth, provider);
   }
 
   async function logout() {
+    // Clear local state immediately before Firebase signOut
+    setCurrentUser(null);
+    setUserProfile(null);
     await signOut(auth);
   }
 
