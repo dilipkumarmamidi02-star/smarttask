@@ -1,13 +1,16 @@
-// Sidebar.jsx
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { X, LogOut } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
-import { LogOut } from "lucide-react";
-import { X } from "lucide-react";
 
 export default function Sidebar({ items, open, onClose, unreadCount = 0 }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { logout } = useAuth();
+
+  async function handleLogout() {
+    await logout();
+    navigate("/login");
+  }
 
   return (
     <>
@@ -57,6 +60,16 @@ export default function Sidebar({ items, open, onClose, unreadCount = 0 }) {
             );
           })}
         </nav>
+
+        <div className="p-3 border-t border-sidebar-border">
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-sidebar-foreground/70 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+          >
+            <LogOut size={18} />
+            Sign Out
+          </button>
+        </div>
       </aside>
     </>
   );
