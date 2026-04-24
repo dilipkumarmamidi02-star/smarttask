@@ -1,9 +1,13 @@
 // Sidebar.jsx
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "@/lib/AuthContext";
+import { LogOut } from "lucide-react";
 import { X } from "lucide-react";
 
 export default function Sidebar({ items, open, onClose, unreadCount = 0 }) {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { logout } = useAuth();
 
   return (
     <>
